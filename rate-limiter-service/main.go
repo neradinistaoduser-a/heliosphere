@@ -8,13 +8,25 @@ import (
 	"rate-limiter-service/handlers"
 	pb "rate-limiter-service/proto/ratelimiter"
 
+	"rate-limiter-service/config"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
 func main() {
+
+	cfg := config.GetConfig()
+
+	shutdownTracing := initTracing(
+		"rate-limiter-service",
+		cfg.JaegerHost+":"+cfg.JaegerGRPCPort,
+	)
+	defer shutdownTracing()
+
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		log.Fatalln("Failed to listen:", err)
@@ -27,7 +39,9 @@ func main() {
 	}(listener)
 
 	// Bootstrap gRPC server.
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 
 	// Bootstrap gRPC service server and respond to request.
 	rateLimiterHandler, err := handlers.NewRateLimiterHandler()

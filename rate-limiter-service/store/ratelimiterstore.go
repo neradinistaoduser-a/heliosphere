@@ -11,6 +11,7 @@ import (
 
 	"github.com/RussellLuo/slidingwindow"
 	"github.com/hashicorp/consul/api"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/ratelimit"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
@@ -42,6 +43,10 @@ func New() (*RateLimiterStore, error) {
 }
 
 func (rs *RateLimiterStore) Get(ctx context.Context, id string) (*pb.RateLimiter, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.Get")
+	defer span.End()
+
 	kv := rs.cli.KV()
 
 	key := fmt.Sprintf("rateLimiters/%s", id)
@@ -62,6 +67,10 @@ func (rs *RateLimiterStore) Get(ctx context.Context, id string) (*pb.RateLimiter
 }
 
 func (rs *RateLimiterStore) GetAll(ctx context.Context) (*pb.ListOfRateLimiters, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.GetAll")
+	defer span.End()
+
 	kv := rs.cli.KV()
 	data, _, err := kv.List("rateLimiters", nil)
 	if err != nil {
@@ -84,6 +93,10 @@ func (rs *RateLimiterStore) GetAll(ctx context.Context) (*pb.ListOfRateLimiters,
 }
 
 func (rs *RateLimiterStore) Create(ctx context.Context, limiter *pb.CreateRateLimiterRequest) (*pb.RateLimiter, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.Create")
+	defer span.End()
+
 	kv := rs.cli.KV()
 
 	id := ""
@@ -112,6 +125,10 @@ func (rs *RateLimiterStore) Create(ctx context.Context, limiter *pb.CreateRateLi
 }
 
 func (rs *RateLimiterStore) Update(ctx context.Context, limiter *pb.UpdateRateLimiterRequest) (*pb.RateLimiter, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.Update")
+	defer span.End()
+
 	kv := rs.cli.KV()
 
 	id := limiter.RateLimiter.Id
@@ -130,12 +147,16 @@ func (rs *RateLimiterStore) Update(ctx context.Context, limiter *pb.UpdateRateLi
 	}
 
 	//update current state in map
-	rs.createOrUpdateLimiter(limiter.RateLimiter, true)
+	rs.createOrUpdateLimiter(ctx, limiter.RateLimiter, true)
 
 	return limiter.RateLimiter, nil
 }
 
 func (rs *RateLimiterStore) Delete(ctx context.Context, id string) (*pb.DeleteRateLimiterResponse, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.Delete")
+	defer span.End()
+
 	kv := rs.cli.KV()
 
 	key := fmt.Sprintf("rateLimiters/%s", id)
@@ -154,6 +175,10 @@ func (rs *RateLimiterStore) Delete(ctx context.Context, id string) (*pb.DeleteRa
 }
 
 func (rs *RateLimiterStore) IsRequestAllowed(ctx context.Context, id string) (*pb.AllowResponse, error) {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.IsRequestAllowed")
+	defer span.End()
+
 	rateLimiter, err := rs.Get(ctx, id)
 	if err != nil {
 		log.Printf("%v Default rate-limiter will be created.", err)
@@ -165,7 +190,7 @@ func (rs *RateLimiterStore) IsRequestAllowed(ctx context.Context, id string) (*p
 		}
 	}
 
-	rs.createOrUpdateLimiter(rateLimiter, false)
+	rs.createOrUpdateLimiter(ctx, rateLimiter, false)
 
 	switch rateLimiter.Type {
 	case "tokenBucket":
@@ -198,7 +223,11 @@ func (rs *RateLimiterStore) IsRequestAllowed(ctx context.Context, id string) (*p
 
 }
 
-func (rs *RateLimiterStore) createOrUpdateLimiter(rateLimiter *pb.RateLimiter, forUpdate bool) error {
+func (rs *RateLimiterStore) createOrUpdateLimiter(ctx context.Context, rateLimiter *pb.RateLimiter, forUpdate bool) error {
+	tracer := otel.Tracer("rate-limiter-service.Store")
+	ctx, span := tracer.Start(ctx, "RateLimiterStore.createOrUpdateLimiter")
+	defer span.End()
+
 	var limiter interface{}
 
 	if forUpdate && rs.rateLimiters[rateLimiter.Id] == nil {
